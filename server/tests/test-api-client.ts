@@ -300,20 +300,20 @@ export class TestAPIClient {
     list: async (
       params?: { page?: number; limit?: number },
       options?: TestAPIOptions
-    ): Promise<ApiResponse<{ data: Moment[]; hasNext: boolean }>> => {
+    ): Promise<ApiResponse<{ size: number, data: Moment[]; hasNext: boolean }>> => {
       const searchParams = new URLSearchParams();
       if (params?.page) searchParams.set('page', params.page.toString());
       if (params?.limit) searchParams.set('limit', params.limit.toString());
       
       const query = searchParams.toString();
-      return this.get<{ data: Moment[]; hasNext: boolean }>(`/moments${query ? `?${query}` : ''}`, options);
+      return this.get<{ size: number, data: Moment[]; hasNext: boolean }>(`/moments${query ? `?${query}` : ''}`, options);
     },
 
     create: async (
       body: CreateMomentRequest,
       options?: TestAPIOptions
-    ): Promise<ApiResponse<Moment>> => {
-      return this.post<Moment>('/moments', body, options);
+    ): Promise<ApiResponse<{ insertedId: number }>> => {
+      return this.post<{ insertedId: number }>('/moments', body, options);
     },
 
     update: async (

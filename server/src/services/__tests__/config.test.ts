@@ -4,6 +4,7 @@ import { createBaseApp } from '../../core/base';
 import { createMockDB, createMockEnv, cleanupTestDB } from '../../../tests/fixtures';
 import { createTestClient } from '../../../tests/test-api-client';
 import type { Database } from 'bun:sqlite';
+import { CacheImpl } from '../../utils/cache';
 
 describe('ConfigService', () => {
     let db: any;
@@ -177,6 +178,83 @@ describe('ConfigService', () => {
             const result = await api.config.clearCache({ token: 'mock_token_1' });
 
             expect(result.error).toBeUndefined();
+        });
+
+        it('should not clear server config when clearing cache', async () => {
+            // Create real cache and config instances
+            const realCache = new CacheImpl(db, env, 'cache', 'database');
+            const realServerConfig = new CacheImpl(db, env, 'server.config', 'database');
+            const realClientConfig = new CacheImpl(db, env, 'client.config', 'database');
+
+            // Set some cache data
+            await realCache.set('feed_1', 'feed_data_1');
+            await realCache.set('feed_2', 'feed_data_2');
+
+            // Set some config data
+            await realServerConfig.set('webhook_url', 'https://example.com/webhook');
+            await realServerConfig.set('secret_key', 'secret123');
+            await realClientConfig.set('site.name', 'My Site');
+            await realClientConfig.set('site.description', 'My Description');
+
+            // Update app to use real instances
+            app.state('cache', realCache);
+            app.state('serverConfig', realServerConfig);
+            app.state('clientConfig', realClientConfig);
+
+            // Clear cache as admin
+            const result = await api.config.clearCache({ token: 'mock_token_1' });
+            expect(result.error).toBeUndefined();
+
+            // Verify cache is cleared
+            const cacheData = await realCache.all();
+            expect(cacheData.size).toBe(0);
+
+            // Verify server config is NOT cleared
+            const webhookUrl = await realServerConfig.get('webhook_url');
+            const secretKey = await realServerConfig.get('secret_key');
+            expect(webhookUrl).toBe('https://example.com/webhook');
+            expect(secretKey).toBe('secret123');
+
+            // Verify client config is NOT cleared
+            const siteName = await realClientConfig.get('site.name');
+            const siteDesc = await realClientConfig.get('site.description');
+            expect(siteName).toBe('My Site');
+            expect(siteDesc).toBe('My Description');
+
+            // Verify configs can still be retrieved via API
+            const clientConfigResult = await api.config.get('client');
+            expect(clientConfigResult.error).toBeUndefined();
+            expect(clientConfigResult.data?.['site.name']).toBe('My Site');
+
+            const serverConfigResult = await api.config.get('server', { token: 'mock_token_1' });
+            expect(serverConfigResult.error).toBeUndefined();
+            expect(serverConfigResult.data?.['webhook_url']).toBe('https://example.com/webhook');
+        });
+
+        it('should only clear cache entries with type="cache"', async () => {
+            // Create real instances
+            const publicCache = new CacheImpl(db, env, 'cache', 'database');
+            const serverConfig = new CacheImpl(db, env, 'server.config', 'database');
+            const clientConfig = new CacheImpl(db, env, 'client.config', 'database');
+
+            // Set data in all three stores
+            await publicCache.set('search_results', { query: 'test', results: [] });
+            await serverConfig.set('api_key', 'sk-1234567890');
+            await clientConfig.set('theme', 'dark');
+
+            // Update app state
+            app.state('cache', publicCache);
+            app.state('serverConfig', serverConfig);
+            app.state('clientConfig', clientConfig);
+
+            // Clear cache
+            const result = await api.config.clearCache({ token: 'mock_token_1' });
+            expect(result.error).toBeUndefined();
+
+            // Verify only public cache is cleared
+            expect(await publicCache.get('search_results')).toBeUndefined();
+            expect(await serverConfig.get('api_key')).toBe('sk-1234567890');
+            expect(await clientConfig.get('theme')).toBe('dark');
         });
     });
 

@@ -174,7 +174,7 @@ describe('MomentsService', () => {
             }, { token: 'mock_token_1' });
 
             expect(result.error).toBeUndefined();
-            expect(result.data?.insertedId).toBeDefined();
+            expect(result.data?.insertedId).toBeNumber();
         });
 
         it('should require content', async () => {

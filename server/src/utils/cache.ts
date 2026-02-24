@@ -178,6 +178,10 @@ export class CacheImpl {
     private storageProvider: StorageProvider;
 
     constructor(db: DB, env: Env, type: string = "cache", storageMode?: CacheStorageMode) {
+        // 确保 type 不为空，防止不同类型共享同一个存储位置
+        if (!type || type.trim() === '') {
+            throw new Error('Cache type cannot be empty');
+        }
         this.type = type;
         this.db = db;
         this.env = env;

@@ -324,6 +324,46 @@ describe('CacheImpl - 数据库持久化测试', () => {
         expect(rows).toHaveLength(0);
     });
 
+    it('clear 不应该清除其他类型的数据（如 server.config 和 client.config）', async () => {
+        // 创建不同类型的缓存实例
+        const publicCache = new CacheImpl(db as any, mockEnv, 'cache', 'database');
+        const serverConfig = new CacheImpl(db as any, mockEnv, 'server.config', 'database');
+        const clientConfig = new CacheImpl(db as any, mockEnv, 'client.config', 'database');
+
+        // 设置数据
+        await publicCache.set('feed_1', 'feed_data');
+        await serverConfig.set('webhook_url', 'https://example.com');
+        await clientConfig.set('site.name', 'Test Site');
+
+        // 只清除公共缓存
+        await publicCache.clear();
+
+        // 验证公共缓存已清除
+        const publicRows = await db.select().from(cache).where(eq(cache.type, 'cache'));
+        expect(publicRows).toHaveLength(0);
+
+        // 验证 server.config 未被清除
+        const serverRows = await db.select().from(cache).where(eq(cache.type, 'server.config'));
+        expect(serverRows).toHaveLength(1);
+        expect(serverRows[0].key).toBe('webhook_url');
+        // 字符串值直接存储，不添加引号
+        expect(serverRows[0].value).toBe('https://example.com');
+
+        // 验证 client.config 未被清除
+        const clientRows = await db.select().from(cache).where(eq(cache.type, 'client.config'));
+        expect(clientRows).toHaveLength(1);
+        expect(clientRows[0].key).toBe('site.name');
+        // 字符串值直接存储，不添加引号
+        expect(clientRows[0].value).toBe('Test Site');
+
+        // 验证重新加载后 config 数据仍然存在
+        const newServerConfig = new CacheImpl(db as any, mockEnv, 'server.config', 'database');
+        const newClientConfig = new CacheImpl(db as any, mockEnv, 'client.config', 'database');
+
+        expect(await newServerConfig.get('webhook_url')).toBe('https://example.com');
+        expect(await newClientConfig.get('site.name')).toBe('Test Site');
+    });
+
     it('应该支持多个 cache 类型', async () => {
         const cache1 = new CacheImpl(db as any, mockEnv, 'type1', 'database');
         const cache2 = new CacheImpl(db as any, mockEnv, 'type2', 'database');
@@ -342,6 +382,22 @@ describe('CacheImpl - 数据库持久化测试', () => {
         // 字符串值直接存储，不添加引号
         expect(type1Rows[0].value).toBe('value1');
         expect(type2Rows[0].value).toBe('value2');
+    });
+
+    it('不应该接受空的 type 参数', () => {
+        // 空字符串应该抛出错误
+        expect(() => {
+            new CacheImpl(db as any, mockEnv, '', 'database');
+        }).toThrow('Cache type cannot be empty');
+
+        // 只有空格的字符串应该抛出错误
+        expect(() => {
+            new CacheImpl(db as any, mockEnv, '   ', 'database');
+        }).toThrow('Cache type cannot be empty');
+
+        // 有效的 type 应该正常创建
+        const validCache = new CacheImpl(db as any, mockEnv, 'valid', 'database');
+        expect(validCache).toBeDefined();
     });
 });
 
